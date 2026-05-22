@@ -7,7 +7,7 @@ use clap::Parser;
 #[command(
     name = "iwatchr",
     about = "Watch directories and run a command on every file change",
-    long_about = None
+    long_about = None,
 )]
 pub struct Args {
     /// Directories to watch (positional). When --exec is omitted the last
@@ -29,6 +29,10 @@ pub struct Args {
     /// Glob pattern to ignore (repeatable). `.git/**` is always ignored.
     #[arg(long = "ignore", short = 'i', value_name = "PATTERN")]
     pub ignore: Vec<String>,
+
+    /// Print version information and exit.
+    #[arg(short = 'v', long = "version")]
+    pub version: bool,
 }
 
 /// Validated, resolved configuration ready for use by the watcher and runner.
@@ -188,5 +192,37 @@ mod tests {
         let args = Args::try_parse_from(["iwatchr"]).unwrap();
         let err = args.resolve().unwrap_err();
         assert!(err.contains("--exec") || err.contains("positional"));
+    }
+
+    // ── Version / help flags ────────────────────────────────────────────────
+
+    #[test]
+    fn version_flag_short_sets_field() {
+        let args = Args::try_parse_from(["iwatchr", "-v"]).unwrap();
+        assert!(args.version);
+    }
+
+    #[test]
+    fn version_flag_long_sets_field() {
+        let args = Args::try_parse_from(["iwatchr", "--version"]).unwrap();
+        assert!(args.version);
+    }
+
+    #[test]
+    fn version_flag_is_false_by_default() {
+        let args = Args::try_parse_from(["iwatchr", "./src", "echo hi"]).unwrap();
+        assert!(!args.version);
+    }
+
+    #[test]
+    fn help_flag_short_is_recognised() {
+        let err = Args::try_parse_from(["iwatchr", "-h"]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn help_flag_long_is_recognised() {
+        let err = Args::try_parse_from(["iwatchr", "--help"]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
     }
 }

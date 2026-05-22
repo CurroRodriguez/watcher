@@ -3,7 +3,15 @@ use iwatchr::cli::Args;
 use iwatchr::{runner, watcher};
 
 fn main() {
-    let config = match Args::parse().resolve() {
+    let args = Args::parse();
+
+    // Handle -v / --version before resolve() consumes args.
+    if args.version {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        std::process::exit(0);
+    }
+
+    let config = match args.resolve() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("[iwatchr] Error: {e}");
