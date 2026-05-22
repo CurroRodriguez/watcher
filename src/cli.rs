@@ -7,7 +7,7 @@ use clap::Parser;
 #[command(
     name = "iwatchr",
     about = "Watch directories and run a command on every file change",
-    long_about = None
+    long_about = None,
 )]
 pub struct Args {
     /// Directories to watch (positional). When --exec is omitted the last
@@ -29,6 +29,10 @@ pub struct Args {
     /// Glob pattern to ignore (repeatable). `.git/**` is always ignored.
     #[arg(long = "ignore", short = 'i', value_name = "PATTERN")]
     pub ignore: Vec<String>,
+
+    /// Print version information and exit.
+    #[arg(short = 'v', long = "version")]
+    pub version: bool,
 }
 
 /// Validated, resolved configuration ready for use by the watcher and runner.
@@ -48,6 +52,18 @@ impl Args {
     /// - Otherwise, the **last** positional arg is the command; the rest are dirs.
     /// - `.git/**` is always prepended to the ignore list.
     pub fn resolve(self) -> Result<Config, String> {
+        // When -v/--version is requested, command and dirs are irrelevant;
+        // skip all validation and return a no-op config. The caller (main)
+        // prints the version and exits before using this config.
+        if self.version {
+            return Ok(Config {
+                dirs: vec![],
+                command: String::new(),
+                debounce_ms: self.debounce,
+                ignore_patterns: vec![".git/**".to_string()],
+            });
+        }
+
         let (dirs, command) = if let Some(cmd) = self.exec {
             let dirs = self.paths.into_iter().map(PathBuf::from).collect();
             (dirs, cmd)
@@ -188,5 +204,50 @@ mod tests {
         let args = Args::try_parse_from(["iwatchr"]).unwrap();
         let err = args.resolve().unwrap_err();
         assert!(err.contains("--exec") || err.contains("positional"));
+    }
+
+    // ── Version / help flags ────────────────────────────────────────────────
+
+    #[test]
+    fn version_flag_short_sets_field() {
+        let args = Args::try_parse_from(["iwatchr", "-v"]).unwrap();
+        assert!(args.version);
+    }
+
+    #[test]
+    fn version_flag_long_sets_field() {
+        let args = Args::try_parse_from(["iwatchr", "--version"]).unwrap();
+        assert!(args.version);
+    }
+
+    #[test]
+    fn version_flag_is_false_by_default() {
+        let args = Args::try_parse_from(["iwatchr", "./src", "echo hi"]).unwrap();
+        assert!(!args.version);
+    }
+
+    #[test]
+    fn version_flag_resolve_does_not_require_command() {
+        // -v alone (no dirs, no command) must not produce a validation error.
+        let args = Args::try_parse_from(["iwatchr", "-v"]).unwrap();
+        assert!(args.resolve().is_ok());
+    }
+
+    #[test]
+    fn version_flag_long_resolve_does_not_require_command() {
+        let args = Args::try_parse_from(["iwatchr", "--version"]).unwrap();
+        assert!(args.resolve().is_ok());
+    }
+
+    #[test]
+    fn help_flag_short_is_recognised() {
+        let err = Args::try_parse_from(["iwatchr", "-h"]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn help_flag_long_is_recognised() {
+        let err = Args::try_parse_from(["iwatchr", "--help"]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
     }
 }
