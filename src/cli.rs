@@ -52,6 +52,18 @@ impl Args {
     /// - Otherwise, the **last** positional arg is the command; the rest are dirs.
     /// - `.git/**` is always prepended to the ignore list.
     pub fn resolve(self) -> Result<Config, String> {
+        // When -v/--version is requested, command and dirs are irrelevant;
+        // skip all validation and return a no-op config. The caller (main)
+        // prints the version and exits before using this config.
+        if self.version {
+            return Ok(Config {
+                dirs: vec![],
+                command: String::new(),
+                debounce_ms: self.debounce,
+                ignore_patterns: vec![".git/**".to_string()],
+            });
+        }
+
         let (dirs, command) = if let Some(cmd) = self.exec {
             let dirs = self.paths.into_iter().map(PathBuf::from).collect();
             (dirs, cmd)
@@ -212,6 +224,19 @@ mod tests {
     fn version_flag_is_false_by_default() {
         let args = Args::try_parse_from(["iwatchr", "./src", "echo hi"]).unwrap();
         assert!(!args.version);
+    }
+
+    #[test]
+    fn version_flag_resolve_does_not_require_command() {
+        // -v alone (no dirs, no command) must not produce a validation error.
+        let args = Args::try_parse_from(["iwatchr", "-v"]).unwrap();
+        assert!(args.resolve().is_ok());
+    }
+
+    #[test]
+    fn version_flag_long_resolve_does_not_require_command() {
+        let args = Args::try_parse_from(["iwatchr", "--version"]).unwrap();
+        assert!(args.resolve().is_ok());
     }
 
     #[test]
